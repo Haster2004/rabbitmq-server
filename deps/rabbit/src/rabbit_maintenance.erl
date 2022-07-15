@@ -55,26 +55,18 @@
         {requires,    networking}]}).
 
 boot() ->
-    case rabbit_feature_flags:is_enabled(?FEATURE_FLAG, non_blocking) of
-        true ->
-            TableName = status_table_name(),
-            rabbit_log:info(
-                "Creating table ~s for feature flag `~s`",
-                [TableName, ?FEATURE_FLAG]),
-            try
-                _ = rabbit_table:create(
-                    TableName,
-                    status_table_definition())
-            catch throw:Reason  ->
-                rabbit_log:error(
-                    "Failed to create maintenance status table: ~p",
-                    [Reason])
-            end;
-        false ->
-            ok;
-        state_changing ->
-            %% feature flag migration will do the job for us
-            ok
+    TableName = status_table_name(),
+    rabbit_log:info(
+      "Creating table ~s for feature flag `~s`",
+      [TableName, ?FEATURE_FLAG]),
+    try
+        _ = rabbit_table:create(
+              TableName,
+              status_table_definition())
+    catch throw:Reason  ->
+              rabbit_log:error(
+                "Failed to create maintenance status table: ~p",
+                [Reason])
     end.
 
 %%
@@ -98,15 +90,6 @@ is_enabled() ->
 
 -spec drain() -> ok.
 drain() ->
-    case is_enabled() of
-        true  -> do_drain();
-        false ->
-            rabbit_log:error("Feature flag '~s' is not enabled, cannot put this node under maintenance", [?FEATURE_FLAG]),
-            {error, rabbit_misc:format("Feature flag '~s' is not enabled, cannot put this node under maintenance", [?FEATURE_FLAG])}
-    end.
-
--spec do_drain() -> ok.
-do_drain() ->
     rabbit_log:warning("This node is being put into maintenance (drain) mode"),
     mark_as_being_drained(),
     rabbit_log:info("Marked this node as undergoing maintenance"),
@@ -135,15 +118,6 @@ do_drain() ->
 
 -spec revive() -> ok.
 revive() ->
-    case is_enabled() of
-        true  -> do_revive();
-        false ->
-            rabbit_log:error("Feature flag '~s' is not enabled, cannot put this node out of maintenance", [?FEATURE_FLAG]),
-            {error, rabbit_misc:format("Feature flag '~s' is not enabled, cannot put this node out of maintenance", [?FEATURE_FLAG])}
-    end.
-
--spec do_revive() -> ok.
-do_revive() ->
     rabbit_log:info("This node is being revived from maintenance (drain) mode"),
     revive_local_quorum_queue_replicas(),
     rabbit_log:info("Resumed all listeners and will accept client connections again"),
