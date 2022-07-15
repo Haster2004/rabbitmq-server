@@ -227,6 +227,14 @@ test_post_process_payload_rich_auth_request(_) ->
         ]
        ,[]
      },
+      { "should ignore unknown actions",
+        [#{<<"type">> => ?RESOURCE_SERVER_TYPE,
+          <<"locations">> => [<<"cluster:rabbitmq">>],
+          <<"actions">> => [<<"read2">>, <<"read">>]
+          }
+         ]
+        ,[<<"rabbitmq.read:*/*/*">> ]
+      },
       {  "should filter out locations within a permisions not meant for <resource_server_id>",
          [#{<<"type">> => ?RESOURCE_SERVER_TYPE,
            <<"locations">> => [<<"cluster:rabbitmq">>, <<"cluster:unknown">> ],
@@ -235,7 +243,7 @@ test_post_process_payload_rich_auth_request(_) ->
          ],
          [<<"rabbitmq.read:*/*/*">> ]
      },
-      {  "should produce as many scopes as actions mulitplied by locations meant for  <resource_server_id>",
+      {  "should produce as many scopes as actions mulitplied by locations meant for <resource_server_id>",
           [#{<<"type">> => ?RESOURCE_SERVER_TYPE,
             <<"locations">> => [<<"cluster:rabbitmq/vhost:a">>, <<"cluster:rabbitmq/vhost:b">> ],
             <<"actions">> => [<<"read">>]
@@ -243,13 +251,29 @@ test_post_process_payload_rich_auth_request(_) ->
           ],
           [<<"rabbitmq.read:a/*/*">>, <<"rabbitmq.read:b/*/*">> ]
       },
-      {  "should produce as many scopes as locations meant for  <resource_server_id> by actions",
+      {  "should produce as many scopes as locations meant for <resource_server_id> multiplied by actions",
           [#{<<"type">> => ?RESOURCE_SERVER_TYPE,
             <<"locations">> => [<<"cluster:rabbitmq/vhost:a">>, <<"cluster:rabbitmq/vhost:b">> ],
             <<"actions">> => [<<"read">>, <<"write">>]
             }
           ],
           [<<"rabbitmq.read:a/*/*">>, <<"rabbitmq.read:b/*/*">>, <<"rabbitmq.write:a/*/*">>, <<"rabbitmq.write:b/*/*">> ]
+      },
+      {  "should accept single value locations",
+         [#{<<"type">> => ?RESOURCE_SERVER_TYPE,
+           <<"locations">> => <<"cluster:rabbitmq">>,
+           <<"actions">> => [<<"read">>]
+           }
+         ],
+         [<<"rabbitmq.read:*/*/*">> ]
+     },
+       {  "should accept single value actions",
+          [#{<<"type">> => ?RESOURCE_SERVER_TYPE,
+            <<"locations">> => <<"cluster:rabbitmq">>,
+            <<"actions">> => <<"read">>
+            }
+          ],
+          [<<"rabbitmq.read:*/*/*">> ]
       },
         {  "should merge all scopes produced by each permission",
             [#{<<"type">> => ?RESOURCE_SERVER_TYPE,
@@ -295,13 +319,29 @@ test_post_process_payload_rich_auth_request(_) ->
               ],
               [ <<"rabbitmq.read:*/*/*">> ]
           },
-        {  "can specifyrouting-key only -> on any vhost and on any queue if that makes sense ",
+        {  "can specify routing-key only -> on any vhost and on any queue if that makes sense ",
             [#{<<"type">> => ?RESOURCE_SERVER_TYPE,
               <<"locations">> => [<<"cluster:rabbitmq/routing-key:b">> ],
               <<"actions">> => [<<"read">>]
               }
             ],
             [<<"rabbitmq.read:*/*/b">> ]
+        },
+        {  "can specify vhost, queue or exchange and routing-key that combine fixed values and wildcards",
+            [#{<<"type">> => ?RESOURCE_SERVER_TYPE,
+              <<"locations">> => [<<"cluster:rabbitmq/vhost:finance-*/queue:*-invoice/routing-key:r-*">> ],
+              <<"actions">> => [<<"read">>]
+              }
+            ],
+            [<<"rabbitmq.read:finance-*/*-invoice/r-*">> ]
+        },
+        {  "can use regular expression on any location's attribute except on the cluster",
+            [#{<<"type">> => ?RESOURCE_SERVER_TYPE,
+              <<"locations">> => [<<"cluster:rabbitmq/vhost:^finance-.*">> ],
+              <<"actions">> => [<<"read">>]
+              }
+            ],
+            [<<"rabbitmq.read:^finance-.*/*/*">> ]
         },
         { "should ignore permissions which are empty", [],[]}
 

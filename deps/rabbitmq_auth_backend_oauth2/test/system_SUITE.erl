@@ -51,7 +51,8 @@ groups() ->
                        test_successful_connection_with_complex_claim_as_a_map,
                        test_successful_connection_with_complex_claim_as_a_list,
                        test_successful_connection_with_complex_claim_as_a_binary,
-                       test_successful_connection_with_keycloak_token
+                       test_successful_connection_with_keycloak_token,
+                       test_successful_connection_with_rich_authorization_request_token
      ]},
 
      {scope_aliases, [], [
@@ -191,6 +192,12 @@ init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection
                 <<"rabbitmq.read:vhost3/*">>
             ]
         }]),
+    rabbit_ct_helpers:testcase_started(Config, Testcase),
+    Config;
+
+init_per_testcase(Testcase, Config) when Testcase =:= test_successful_connection_with_rich_authorization_request_token ->
+    ok = rabbit_ct_broker_helpers:rpc(Config, 0, application, set_env,
+        [rabbitmq_auth_backend_oauth2, resource_server_type, <<"rabbitmq-type">> ]),
     rabbit_ct_helpers:testcase_started(Config, Testcase),
     Config;
 
@@ -402,6 +409,23 @@ test_successful_connection_with_keycloak_token(Config) ->
                  #{<<"rsid">> => <<"bee8fac6-c3ec-11e9-aa8c-2a2ae2dbcce4">>,
                    <<"rsname">> => <<"Default Resource">>,
                    <<"scopes">> => [<<"rabbitmq-resource-read">>]}]}}
+    ),
+    Conn     = open_unmanaged_connection(Config, 0, <<"username">>, Token),
+    {ok, Ch} = amqp_connection:open_channel(Conn),
+    #'queue.declare_ok'{queue = _} =
+        amqp_channel:call(Ch, #'queue.declare'{exclusive = true}),
+    close_connection_and_channel(Conn, Ch).
+
+test_successful_connection_with_rich_authorization_request_token(Config) ->
+    {_Algo, Token} = generate_valid_token_with_extra_fields(
+        Config,
+        #{<<"authorization_details">> =>
+                [#{<<"type">> => <<"rabbitmq-type">>,
+                  <<"locations">> => [<<"cluster:rabbitmq/vhost:*">> ],
+                  <<"actions">> => [<<"read">>,<<"configure">>, <<"write">>]
+                  }
+                ]
+           }
     ),
     Conn     = open_unmanaged_connection(Config, 0, <<"username">>, Token),
     {ok, Ch} = amqp_connection:open_channel(Conn),

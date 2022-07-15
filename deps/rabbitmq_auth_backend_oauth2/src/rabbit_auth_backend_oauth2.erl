@@ -331,9 +331,26 @@ extract_scopes_from_keycloak_permissions(Acc, [H | T]) when is_map(H) ->
 extract_scopes_from_keycloak_permissions(Acc, [_ | T]) ->
     extract_scopes_from_keycloak_permissions(Acc, T).
 
+
+-define(ACTIONS_FIELD, <<"actions">>).
+-define(LOCATIONS_FIELD, <<"locations">>).
+-define(TYPE_FIELD, <<"type">>).
+
+-define(CLUSTER_LOCATION_ATTRIBUTE, <<"cluster">>).
+-define(VHOST_LOCATION_ATTRIBUTE, <<"vhost">>).
+-define(QUEUE_LOCATION_ATTRIBUTE, <<"queue">>).
+-define(EXCHANGE_LOCATION_ATTRIBUTE, <<"exchange">>).
+-define(ROUTING_KEY_LOCATION_ATTRIBUTE, <<"routing-key">>).
+-define(LOCATION_ATTRIBUTES, [?CLUSTER_LOCATION_ATTRIBUTE, ?VHOST_LOCATION_ATTRIBUTE,
+  ?QUEUE_LOCATION_ATTRIBUTE, ?EXCHANGE_LOCATION_ATTRIBUTE, ?ROUTING_KEY_LOCATION_ATTRIBUTE]).
+
+-define(ALLOWED_ACTION_VALUES, [<<"read">>, <<"write">>, <<"configure">>, <<"tag:monitoring">>,
+  <<"tag:administrator">>, <<"tag:management">>, <<"tag:policymaker">> ]).
+
+
 put_location_attribute(Attribute, Map) -> put_attribute(binary:split(Attribute, <<":">>, [global, trim_all]), Map).
 put_attribute([Key, Value | _], Map) ->
-  case lists:member(Key, [<<"cluster">>, <<"vhost">>, <<"queue">>, <<"exchange">>, <<"routing-key">> ]) of
+  case lists:member(Key, ?LOCATION_ATTRIBUTES) of
     true -> maps:put(Key, Value, Map);
     false -> Map
   end;
@@ -348,9 +365,9 @@ convert_attribute_list_to_attribute_map([], Map) ->
   Map.
 
 build_permission_resource_path(Map) ->
-  Vhost = maps:get(<<"vhost">>, Map, <<"*">>),
-  Resource = maps:get(<<"queue">>, Map, maps:get(<<"exchange">>, Map, <<"*">>)),
-  RoutingKey = maps:get(<<"routing-key">>, Map, <<"*">>),
+  Vhost = maps:get(?VHOST_LOCATION_ATTRIBUTE, Map, <<"*">>),
+  Resource = maps:get(?QUEUE_LOCATION_ATTRIBUTE, Map, maps:get(?EXCHANGE_LOCATION_ATTRIBUTE, Map, <<"*">>)),
+  RoutingKey = maps:get(?ROUTING_KEY_LOCATION_ATTRIBUTE, Map, <<"*">>),
 
   % make sure that Resource is not error
   <<Vhost/binary,"/",Resource/binary,"/",RoutingKey/binary>>.
@@ -367,10 +384,10 @@ map_locations_to_permission_resource_paths(ResourceServerId, L) ->
     (cluster_matches_resource_server_id(L3, ResourceServerId)) and (legal_queue_and_exchange_values(L3)) end, Locations)).
 
 
-cluster_matches_resource_server_id(#{<<"cluster">> := Cluster}, ResourceServerId) when Cluster == ResourceServerId -> true;
+cluster_matches_resource_server_id(#{?CLUSTER_LOCATION_ATTRIBUTE := Cluster}, ResourceServerId) when Cluster == ResourceServerId -> true;
 cluster_matches_resource_server_id(_, _) -> false.
 
-legal_queue_and_exchange_values(#{<<"queue">> := Queue, <<"exchange">> := Exchange}) ->
+legal_queue_and_exchange_values(#{?QUEUE_LOCATION_ATTRIBUTE := Queue, ?EXCHANGE_LOCATION_ATTRIBUTE := Exchange}) ->
   case Queue of
      <<>> -> case Exchange of
                   <<>> -> true;
@@ -385,17 +402,19 @@ legal_queue_and_exchange_values(_) -> true.
 
 map_rich_auth_permissions_to_scopes(ResourceServerId, Permissions) -> map_rich_auth_permissions_to_scopes(ResourceServerId, Permissions, []).
 map_rich_auth_permissions_to_scopes(_, [], Acc) -> Acc;
-map_rich_auth_permissions_to_scopes(ResourceServerId, [  #{<<"actions">> := Actions,  <<"locations">> := Locations }  | T ], Acc) ->
+map_rich_auth_permissions_to_scopes(ResourceServerId, [ #{?ACTIONS_FIELD := Actions, ?LOCATIONS_FIELD := Locations }  | T ], Acc) ->
   ResourcePaths = map_locations_to_permission_resource_paths(ResourceServerId, Locations),
   Scopes = case Actions of
        undefined -> [];
        ActionsAsList when is_list(ActionsAsList) ->
-          build_scopes(ResourceServerId, ActionsAsList, ResourcePaths);
+          build_scopes(ResourceServerId, skip_unknown_actions(ActionsAsList), ResourcePaths);
        ActionsAsBinary when is_binary(ActionsAsBinary) ->
-          build_scopes(ResourceServerId, [ActionsAsBinary], ResourcePaths)
+          build_scopes(ResourceServerId, skip_unknown_actions([ActionsAsBinary]), ResourcePaths)
        end,
   map_rich_auth_permissions_to_scopes(ResourceServerId, T, Acc ++ Scopes).
 
+skip_unknown_actions(Actions) ->
+  lists:filter(fun(A) -> lists:member(A, ?ALLOWED_ACTION_VALUES) end, Actions).
 
 build_scopes(ResourceServerId, Actions, Locations) -> lists:flatmap(fun(Action) -> build_scopes_for_action(ResourceServerId, Action, Locations, []) end, Actions).
 
@@ -404,7 +423,7 @@ build_scopes_for_action(ResourceServerId, Action, [Location|Locations], Acc) ->
   build_scopes_for_action(ResourceServerId, Action, Locations, [ Scope | Acc ] );
 build_scopes_for_action(_, _, [], Acc) -> Acc.
 
-is_legal_permission(#{<<"actions">> := Actions,  <<"locations">> := Locations , <<"type">> := Type }, ResourceServerType) ->
+is_legal_permission(#{?ACTIONS_FIELD := _, ?LOCATIONS_FIELD:= _ , ?TYPE_FIELD := Type }, ResourceServerType) ->
   case ResourceServerType of
     <<>> -> false;
     V when V == Type -> true;
