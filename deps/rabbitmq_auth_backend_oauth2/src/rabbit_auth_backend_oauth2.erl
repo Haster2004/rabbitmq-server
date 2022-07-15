@@ -344,6 +344,7 @@ extract_scopes_from_keycloak_permissions(Acc, [_ | T]) ->
 -define(LOCATION_ATTRIBUTES, [?CLUSTER_LOCATION_ATTRIBUTE, ?VHOST_LOCATION_ATTRIBUTE,
   ?QUEUE_LOCATION_ATTRIBUTE, ?EXCHANGE_LOCATION_ATTRIBUTE, ?ROUTING_KEY_LOCATION_ATTRIBUTE]).
 
+-define(ALLOWED_TAG_VALUES, [<<"tag:monitoring">>, <<"tag:administrator">>, <<"tag:management">>, <<"tag:policymaker">> ]).
 -define(ALLOWED_ACTION_VALUES, [<<"read">>, <<"write">>, <<"configure">>, <<"tag:monitoring">>,
   <<"tag:administrator">>, <<"tag:management">>, <<"tag:policymaker">> ]).
 
@@ -416,12 +417,19 @@ map_rich_auth_permissions_to_scopes(ResourceServerId, [ #{?ACTIONS_FIELD := Acti
 skip_unknown_actions(Actions) ->
   lists:filter(fun(A) -> lists:member(A, ?ALLOWED_ACTION_VALUES) end, Actions).
 
-build_scopes(ResourceServerId, Actions, Locations) -> lists:flatmap(fun(Action) -> build_scopes_for_action(ResourceServerId, Action, Locations, []) end, Actions).
+produce_list_of_user_tag_or_action_on_resources(ResourceServerId, ActionOrUserTag, Locations) ->
+  case lists:member(ActionOrUserTag, ?ALLOWED_TAG_VALUES) of
+    true -> [<< ResourceServerId/binary, ".", ActionOrUserTag/binary >>];
+    _ -> build_scopes_for_action(ResourceServerId, ActionOrUserTag, Locations, [])
+  end.
 
 build_scopes_for_action(ResourceServerId, Action, [Location|Locations], Acc) ->
   Scope = << ResourceServerId/binary, ".", Action/binary, ":", Location/binary >>,
   build_scopes_for_action(ResourceServerId, Action, Locations, [ Scope | Acc ] );
 build_scopes_for_action(_, _, [], Acc) -> Acc.
+
+build_scopes(ResourceServerId, Actions, Locations) -> lists:flatmap(
+  fun(Action) -> produce_list_of_user_tag_or_action_on_resources(ResourceServerId, Action, Locations) end, Actions).
 
 is_legal_permission(#{?ACTIONS_FIELD := _, ?LOCATIONS_FIELD:= _ , ?TYPE_FIELD := Type }, ResourceServerType) ->
   case ResourceServerType of
