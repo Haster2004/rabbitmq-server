@@ -342,6 +342,30 @@ test_post_process_payload_rich_auth_request(_) ->
     ],
     [<<"rabbitmq.read:finance-*/*-invoice/r-*">> ]
   },
+  { "should ignore any location's attribute other than the supported ones",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq/unknown:finance-*/queue:*-invoice/routing-key:r-*">> ],
+        <<"actions">> => [<<"read">>]
+      }
+    ],
+    [<<"rabbitmq.read:*/*-invoice/r-*">> ]
+  },
+  { "should not matter the location's attributes order",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"cluster:rabbitmq/queue:invoices/vhost:finance/routing-key:r-*">> ],
+        <<"actions">> => [<<"read">>]
+      }
+    ],
+    [<<"rabbitmq.read:finance/invoices/r-*">> ]
+  },
+  { "should ignore any location path element which is not compliant with <key>:<value> format",
+    [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
+        <<"locations">> => [<<"some-prefix-value/cluster:rabbitmq/vhost:finance-*/queue:*-invoice/routing-key:r-*">> ],
+        <<"actions">> => [<<"read">>]
+      }
+    ],
+    [<<"rabbitmq.read:finance-*/*-invoice/r-*">> ]
+  },
   { "can use regular expression on any location's attribute except on the cluster",
     [ #{<<"type">> => ?RESOURCE_SERVER_TYPE,
         <<"locations">> => [<<"cluster:rabbitmq/vhost:^finance-.*">> ],
@@ -355,7 +379,7 @@ test_post_process_payload_rich_auth_request(_) ->
     []
   }
   ],
-  
+
   lists:foreach(
       fun({Case, Permissions, ExpectedScope}) ->
           Payload = post_process_payload_with_rich_auth_request(Permissions),
