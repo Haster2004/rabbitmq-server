@@ -18,6 +18,7 @@ all() ->
         test_own_scope,
         test_validate_payload_resource_server_id_mismatch,
         test_validate_payload,
+        test_validate_payload_when_verify_aud_false,
         test_successful_access_with_a_token,
         test_successful_access_with_a_token_that_has_tag_scopes,
         test_unsuccessful_access_with_a_bogus_token,
@@ -60,6 +61,13 @@ init_per_testcase(test_post_process_token_payload_complex_claims, Config) ->
   application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
   Config;
 
+init_per_testcase(test_validate_payload_when_verify_aud_false, Config) ->
+  application:set_env(rabbitmq_auth_backend_oauth2, verify_aud, false),
+  application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
+  Config;
+
+
+
 init_per_testcase(test_post_process_payload_rich_auth_request, Config) ->
   application:set_env(rabbitmq_auth_backend_oauth2, resource_server_type, <<"rabbitmq-type">>),
   application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, <<"rabbitmq">>),
@@ -72,6 +80,7 @@ end_per_testcase(test_post_process_token_payload_complex_claims, Config) ->
   application:set_env(rabbitmq_auth_backend_oauth2, extra_scopes_source, undefined),
   application:set_env(rabbitmq_auth_backend_oauth2, resource_server_id, undefined),
   Config;
+
 end_per_testcase(_, Config) ->
   Config.
 
@@ -169,9 +178,6 @@ post_process_payload_with_keycloak_authorization(Authorization) ->
     {_, EncodedToken} = ?UTIL_MOD:sign_token_hs(Token, Jwk),
     {true, Payload} = uaa_jwt_jwt:decode_and_verify(Jwk, EncodedToken),
     rabbit_auth_backend_oauth2:post_process_payload(Payload).
-
-
-
 
 test_post_process_payload_rich_auth_request(_) ->
 
@@ -967,6 +973,25 @@ test_validate_payload(_) ->
     ?assertEqual({ok, #{<<"aud">>   => [?RESOURCE_SERVER_ID],
                         <<"scope">> => [<<"bar">>, <<"other.third">>]}},
                  rabbit_auth_backend_oauth2:validate_payload(KnownResourceServerId, ?RESOURCE_SERVER_ID)).
+
+test_validate_payload_when_verify_aud_false(_) ->
+    WithoutAud = #{
+                              <<"scope">> => [<<"foo">>, <<"rabbitmq.bar">>,
+                                              <<"bar.foo">>, <<"one.two">>,
+                                              <<"foobar">>, <<"rabbitmq.other.third">>]},
+    ?assertEqual({ok, #{
+                        <<"scope">> => [<<"bar">>, <<"other.third">>]}},
+                 rabbit_auth_backend_oauth2:validate_payload(WithoutAud, ?RESOURCE_SERVER_ID)),
+
+    WithAudWithUnknownResourceId = #{
+                              <<"aud">>   => [<<"unknown">>],
+                              <<"scope">> => [<<"foo">>, <<"rabbitmq.bar">>,
+                                              <<"bar.foo">>, <<"one.two">>,
+                                              <<"foobar">>, <<"rabbitmq.other.third">>]},
+    ?assertEqual({ok, #{<<"aud">>   => [<<"unknown">>],
+                        <<"scope">> => [<<"bar">>, <<"other.third">>]}},
+                 rabbit_auth_backend_oauth2:validate_payload(WithAudWithUnknownResourceId, ?RESOURCE_SERVER_ID)).
+
 
 
 %%

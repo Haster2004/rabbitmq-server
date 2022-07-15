@@ -36,6 +36,8 @@
 -define(RESOURCE_SERVER_ID, resource_server_id).
 %% a term defined for Rich Authorization Request tokens to identify a RabbitMQ permission
 -define(RESOURCE_SERVER_TYPE, resource_server_type).
+%% verify server_server_id aud field is on the aud field
+-define(VERIFY_AUD, verify_aud).
 %% a term used by the IdentityServer community
 -define(COMPLEX_CLAIM_APP_ENV_KEY, extra_scopes_source).
 %% scope aliases map "role names" to a set of scopes
@@ -478,7 +480,12 @@ validate_payload(#{?SCOPE_JWT_FIELD := Scope, ?AUD_JWT_FIELD := Aud} = DecodedTo
     case check_aud(Aud, ResourceServerId) of
         ok           -> {ok, DecodedToken#{?SCOPE_JWT_FIELD => filter_scopes(Scope, ResourceServerId)}};
         {error, Err} -> {refused, {invalid_aud, Err}}
-    end.
+    end;
+validate_payload(#{?SCOPE_JWT_FIELD := Scope} = DecodedToken, ResourceServerId) ->
+  case application:get_env(?APP, ?VERIFY_AUD, true) of
+    true -> {error, {badarg, {aud_field_is_missing}}};
+    false -> {ok, DecodedToken#{?SCOPE_JWT_FIELD => filter_scopes(Scope, ResourceServerId)}}
+  end.
 
 filter_scopes(Scopes, <<"">>) -> Scopes;
 filter_scopes(Scopes, ResourceServerId)  ->
@@ -487,14 +494,18 @@ filter_scopes(Scopes, ResourceServerId)  ->
 
 check_aud(_, <<>>)    -> ok;
 check_aud(Aud, ResourceServerId) ->
-    case Aud of
+  case application:get_env(?APP, ?VERIFY_AUD, true) of
+    true ->
+      case Aud of
         List when is_list(List) ->
             case lists:member(ResourceServerId, Aud) of
                 true  -> ok;
                 false -> {error, {resource_id_not_found_in_aud, ResourceServerId, Aud}}
             end;
         _ -> {error, {badarg, {aud_is_not_a_list, Aud}}}
-    end.
+      end;
+    false -> ok
+  end.
 
 %%--------------------------------------------------------------------
 

@@ -34,6 +34,16 @@
     list_to_binary(cuttlefish:conf_get("auth_oauth2.additional_scopes_key", Conf))
  end}.
 
+%% Configure the plugin to skip validation of the aud field
+%%
+%% {verify_aud, true},
+
+{mapping,
+ "auth_oauth2.verify_aud",
+ "rabbitmq_auth_backend_oauth2.verify_aud",
+ [{datatype, {enum, [true, false]}.
+
+
 %% ID of the default signing key
 %%
 %% {default_key, <<"key-1">>},
